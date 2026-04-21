@@ -411,6 +411,11 @@ func (c *Client) Upload(name, locator, filePath string) (*Result, error) {
 	return c.sendResult(MethodUpload, UploadParams{SessionName: name, Locator: locator, FilePath: filePath})
 }
 
+// Screenshot takes a screenshot in a daemon session.
+func (c *Client) Screenshot(name string) (*Result, error) {
+	return c.sendResult(MethodScreenshot, SessionParams{Name: name})
+}
+
 // Stop stops the daemon server
 func (c *Client) Stop() (*Result, error) {
 	return c.sendResult(MethodStop, nil)

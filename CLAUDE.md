@@ -20,9 +20,7 @@ https://docs.browserless.io/baas/connection-url-patterns
 [元素操作直通测试用例](docs/harness/test/element-operations-test.md) - 覆盖双击、选择、下拉框操作、复选框操作、拖拽、文件上传等 26 个测试用例。包括 dblclick、select、check、uncheck、drag、upload 命令的 daemon 模式测试。
 
 ## 开发经验文档
-[守护进程开发经验](docs/harness/experience/daemon-development-lessons.md) - CLI 架构限制、Windows socket 差异、PID 获取问题、Flag 传递、JSON-RPC 协议设计、Playwright 错误处理等架构和设计相关内容。
-
-[IPC 调试经验](docs/harness/experience/daemon-ipc-debugging.md) - 守护进程 IPC 通信调试问题：异步关闭竞态、启动就绪检测、CLI 命令绕过守护进程、跨平台超时差异、优雅关闭设计、自愈机制、常见调试命令等。
+[守护进程开发经验](docs/harness/experience/daemon-development.md) - 合并了原 daemon-development-lessons.md 和 daemon-ipc-debugging.md 的内容。涵盖 CLI 架构限制、Windows socket 差异、Playwright PID 问题、Flag 传递、JSON-RPC 协议设计、异步关闭竞态、启动就绪检测、CLI 命令绕过守护进程、跨平台超时差异、优雅关闭设计、自愈机制、测试环境问题（ES modules 支持）、命令行引号问题、I/O timeout 排查、Daemon 与本地模式差异、调试技巧和常见错误速查等。
 
 [Daemon 命令支持不完整问题](docs/harness/experience/daemon-command-support.md) - 部分命令（click、fill、tab-*、screenshot 等）不支持 daemon 模式导致 "session not found" 错误的根因分析、修复方案（标准 6 步模式）、文件编辑风险提示及验证方法。
 
