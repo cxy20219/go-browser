@@ -20,11 +20,9 @@ https://docs.browserless.io/baas/connection-url-patterns
 [元素操作直通测试用例](docs/harness/test/element-operations-test.md) - 覆盖双击、选择、下拉框操作、复选框操作、拖拽、文件上传等 26 个测试用例。包括 dblclick、select、check、uncheck、drag、upload 命令的 daemon 模式测试。
 
 ## 开发经验文档
-[守护进程开发经验](docs/harness/experience/daemon-development.md) - 涵盖 CLI 架构限制、Windows socket 差异、Playwright PID 问题、Flag 传递、JSON-RPC 协议设计、异步关闭竞态、启动就绪检测、CLI 命令绕过守护进程、跨平台超时差异、优雅关闭设计、自愈机制、测试环境问题（ES modules 支持）、命令行引号问题、I/O timeout 排查、Daemon 与本地模式差异、调试技巧、常见错误速查。**新增**：添加 Daemon 命令支持的标准模式（protocol/server/client/commands 四层修改）、使用辅助函数避免重复代码（daemonMode/printDaemonSnapshot/daemonSnapshotToSnapshot）、命令支持状态速查表。
+[守护进程开发经验](docs/harness/experience/daemon-development.md) - 涵盖 CLI 架构限制、Windows socket 差异、Playwright PID 问题、Flag 传递、JSON-RPC 协议设计、异步关闭竞态、启动就绪检测、CLI 命令绕过守护进程、跨平台超时差异、优雅关闭设计、自愈机制、测试环境问题（ES modules 支持）、命令行引号问题、I/O timeout 排查、Daemon 与本地模式差异、调试技巧、常见错误速查。包含类型转换坑点、API 设计一致性原则、外部类型直接使用、复制粘贴错误示例、命令分支结构模式、Playwright API 限制、JSON 序列化格式选择、文件编辑风险提示。命令支持标准模式（protocol/server/client/commands 四层修改）、辅助函数（daemonMode/printDaemonSnapshot/daemonSnapshotToSnapshot）、命令支持状态速查表。
 
-[Daemon 命令支持不完整问题](docs/harness/experience/daemon-command-support.md) - 部分命令（click、fill、tab-*、screenshot 等）不支持 daemon 模式导致 "session not found" 错误的根因分析、修复方案（标准 6 步模式）、文件编辑风险提示及验证方法。
-
-[Daemon 开发调试经验](docs/harness/experience/daemon-debugging-lessons.md) - 类型转换坑点（int64/float64、Expires 字段）、API 设计一致性原则、外部类型直接使用、复制粘贴错误示例、命令分支结构模式、Playwright API 限制、JSON 序列化格式选择、文件编辑风险提示。
+[Daemon 有头模式调试经验](docs/harness/experience/daemon-headed-mode.md) - `daemon --headed` 启动后浏览器窗口不显示的问题。根因是 `Server` 结构体未存储 headless 状态，客户端 `--headless` 标志在 daemon 模式下无效。解决方案是在 `Server` 中添加 `headless` 字段，通过 `NewServer(headless)` 传递，daemon 命令传递 `--headed` 标志，handleOpen 使用 `s.headless` 而非 `params.Headless`。包含守护进程模式下的配置传递链路、关键设计原则（Daemon 管理浏览器生命周期）、排查技巧。
 
 ## 要求
 - 开发前看一下相关文档
