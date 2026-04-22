@@ -645,6 +645,92 @@ fmt.Printf("[DEBUG] params.Locator=%q\n", params.Locator)
 | 测试环境 | 简单 HTML 页面更适合测试 |
 | 参数传递 | 命令行引号容易被忽略 |
 
+## 添加 Daemon 命令支持的标准模式
+
+### 问题描述
+新增命令（如 `pdf`）或修复已有命令（如 `screenshot`）时，需要在多个文件中添加支持：
+
+1. `protocol.go` - 定义方法名和结果类型
+2. `server.go` - 实现服务端处理器
+3. `client.go` - 添加客户端调用方法
+4. `cmd/commands/*.go` - 在命令中使用 daemon 模式
+
+### 典型错误：PDF 调用 Screenshot
+```go
+// 错误：pdfCmd 中调用了 client.Screenshot()
+result, err := client.Screenshot(cmd.GetSessionName())
+
+// 正确：应该调用 client.Pdf()
+result, err := client.Pdf(cmd.GetSessionName())
+```
+
+### 最小化修改原则
+- 优先使用 `daemonMode()` 而非手动展开检查条件
+- 使用 `printDaemonSnapshot()` 而非重复打印逻辑
+- 添加新命令时，Daemon 分支调用 client 新方法
+- 确保本地模式 fallback 正确工作
+
+## 使用辅助函数避免重复代码
+
+### daemonMode()
+```go
+func daemonMode() bool {
+    return daemon.IsDaemonRunning() && cmd.GetCDPURL() == "" && !cmd.GetAttachExt() && cmd.GetRemoteURL() == ""
+}
+```
+所有命令应使用此函数，而非手动展开4条件检查。
+
+### printDaemonSnapshot()
+```go
+func printDaemonSnapshot(formatter *output.Formatter, client *daemon.Client, sessionName string) error {
+    snapshotResult, err := client.Snapshot(sessionName)
+    if err != nil {
+        return err
+    }
+    if !snapshotResult.Success || snapshotResult.Snapshot == nil {
+        return fmt.Errorf("daemon snapshot failed")
+    }
+    fmt.Print(formatter.FormatSnapshot(daemonSnapshotToSnapshot(snapshotResult.Snapshot)))
+    return nil
+}
+```
+Daemon 模式成功后应调用此函数获取快照输出。
+
+### daemonSnapshotToSnapshot()
+转换 daemon 快照格式到本地格式，供 Formatter 使用。
+
+## 命令支持状态速查
+
+### 已支持 Daemon
+| 命令 | 备注 |
+|------|------|
+| open/goto/snapshot/reload | 导航相关 |
+| go-back/go-forward | 导航相关 |
+| click/fill/hover | 元素操作 |
+| eval/type/press/keydown/keyup | 键盘操作 |
+| mousemove/mousedown/mouseup/mousewheel | 鼠标操作 |
+| tab-list/new/close/select | 标签页操作 |
+| screenshot/pdf | 媒体操作 |
+| list/close | 会话管理 |
+| dblclick/check/uncheck/select/drag | 高级元素操作 |
+| dialog-accept/dialog-dismiss | 对话框操作 |
+| state-save/state-load | 状态持久化 |
+| cookie-list/get/set/delete/clear | Cookie 操作 |
+| localstorage-list/get/set/delete/clear | localStorage 操作 |
+
+### 不支持 Daemon（会报 session not found）
+| 命令 | 备注 |
+|------|------|
+| sessionstorage-* | 需要实现 |
+| run-code | 功能未实现 |
+
+### 功能未实现
+| 命令 | 备注 |
+|------|------|
+| console/network/route | 功能未实现 |
+| tracing-*/video-* | 功能未实现 |
+| attach | 需要特殊标志 |
+
 ## 相关文档
 
 - [Daemon 命令支持问题](daemon-command-support.md) - 命令支持不完整问题的根因分析和修复方案

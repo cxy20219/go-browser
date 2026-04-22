@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/browserless/go-cli-browser/cmd"
+	"github.com/browserless/go-cli-browser/internal/daemon"
 	"github.com/playwright-community/playwright-go"
 	"github.com/spf13/cobra"
 )
@@ -113,16 +114,6 @@ var runCodeCmd = &cobra.Command{
 		return cobra.ExactArgs(1)(c, args)
 	},
 	RunE: func(c *cobra.Command, args []string) error {
-		sess, err := cmd.GetSession()
-		if err != nil {
-			return err
-		}
-
-		page, err := sess.CurrentActivePage()
-		if err != nil {
-			return err
-		}
-
 		code := ""
 		if codeFilename != "" {
 			data, err := os.ReadFile(codeFilename)
@@ -133,6 +124,34 @@ var runCodeCmd = &cobra.Command{
 		} else {
 			code = args[0]
 		}
+
+		if daemonMode() {
+			client, err := daemon.NewClient()
+			if err != nil {
+				return err
+			}
+			defer client.Close()
+			result, err := client.Eval(cmd.GetSessionName(), code)
+			if err != nil {
+				return err
+			}
+			if !result.Success {
+				return fmt.Errorf("daemon eval failed: %s", result.Message)
+			}
+			fmt.Printf("Result: %v\n", result.Value)
+			return nil
+		}
+
+		sess, err := cmd.GetSession()
+		if err != nil {
+			return err
+		}
+
+		page, err := sess.CurrentActivePage()
+		if err != nil {
+			return err
+		}
+
 		result, err := page.Evaluate(code, nil)
 		if err != nil {
 			return err

@@ -416,9 +416,123 @@ func (c *Client) Screenshot(name string) (*Result, error) {
 	return c.sendResult(MethodScreenshot, SessionParams{Name: name})
 }
 
+// Pdf generates PDF in a daemon session.
+func (c *Client) Pdf(name string) (*Result, error) {
+	return c.sendResult(MethodPdf, SessionParams{Name: name})
+}
+
+// StateSave saves browser state in a daemon session.
+func (c *Client) StateSave(name, filename string) (*Result, error) {
+	return c.sendResult(MethodStateSave, StateParams{SessionName: name, Filename: filename})
+}
+
+// StateLoad loads browser state in a daemon session.
+func (c *Client) StateLoad(name, filename string) (*Result, error) {
+	return c.sendResult(MethodStateLoad, StateParams{SessionName: name, Filename: filename})
+}
+
+// DialogAccept accepts a dialog in a daemon session.
+func (c *Client) DialogAccept(name, promptText string) (*Result, error) {
+	return c.sendResult(MethodDialogAccept, DialogParams{SessionName: name, PromptText: promptText})
+}
+
+// DialogDismiss dismisses a dialog in a daemon session.
+func (c *Client) DialogDismiss(name string) (*Result, error) {
+	return c.sendResult(MethodDialogDismiss, DialogParams{SessionName: name})
+}
+
+// CookieList lists cookies in a daemon session.
+func (c *Client) CookieList(name string) (*Result, error) {
+	return c.sendResult(MethodCookieList, SessionParams{Name: name})
+}
+
+// CookieGet gets a cookie in a daemon session.
+func (c *Client) CookieGet(sessionName, name string) (*Result, error) {
+	return c.sendResult(MethodCookieGet, CookieParams{SessionName: sessionName, Name: name})
+}
+
+// CookieSet sets a cookie in a daemon session.
+func (c *Client) CookieSet(sessionName, name, value, domain, path string, expires int64, httpOnly, secure bool) (*Result, error) {
+	return c.sendResult(MethodCookieSet, CookieParams{
+		SessionName: sessionName,
+		Name:        name,
+		Value:       value,
+		Domain:      domain,
+		Path:        path,
+		Expires:     expires,
+		HTTPOnly:    httpOnly,
+		Secure:      secure,
+	})
+}
+
+// CookieDelete deletes a cookie in a daemon session.
+func (c *Client) CookieDelete(sessionName, name string) (*Result, error) {
+	return c.sendResult(MethodCookieDelete, CookieParams{SessionName: sessionName, Name: name})
+}
+
+// CookieClear clears all cookies in a daemon session.
+func (c *Client) CookieClear(name string) (*Result, error) {
+	return c.sendResult(MethodCookieClear, SessionParams{Name: name})
+}
+
+// LocalStorageList lists localStorage items in a daemon session.
+func (c *Client) LocalStorageList(name string) (*Result, error) {
+	return c.sendResult(MethodLocalStorage, LocalStorageParams{SessionName: name, Action: "list"})
+}
+
+// LocalStorageGet gets a localStorage item in a daemon session.
+func (c *Client) LocalStorageGet(name, key string) (*Result, error) {
+	return c.sendResult(MethodLocalStorage, LocalStorageParams{SessionName: name, Action: "get", Key: key})
+}
+
+// LocalStorageSet sets a localStorage item in a daemon session.
+func (c *Client) LocalStorageSet(name, key, value string) (*Result, error) {
+	return c.sendResult(MethodLocalStorage, LocalStorageParams{SessionName: name, Action: "set", Key: key, Value: value})
+}
+
+// LocalStorageDelete deletes a localStorage item in a daemon session.
+func (c *Client) LocalStorageDelete(name, key string) (*Result, error) {
+	return c.sendResult(MethodLocalStorage, LocalStorageParams{SessionName: name, Action: "delete", Key: key})
+}
+
+// LocalStorageClear clears localStorage in a daemon session.
+func (c *Client) LocalStorageClear(name string) (*Result, error) {
+	return c.sendResult(MethodLocalStorage, LocalStorageParams{SessionName: name, Action: "clear"})
+}
+
+// SessionStorageList lists sessionStorage items in a daemon session.
+func (c *Client) SessionStorageList(name string) (*Result, error) {
+	return c.sendResult(MethodSessionStorage, SessionStorageParams{SessionName: name, Action: "list"})
+}
+
+// SessionStorageGet gets a sessionStorage item in a daemon session.
+func (c *Client) SessionStorageGet(name, key string) (*Result, error) {
+	return c.sendResult(MethodSessionStorage, SessionStorageParams{SessionName: name, Action: "get", Key: key})
+}
+
+// SessionStorageSet sets a sessionStorage item in a daemon session.
+func (c *Client) SessionStorageSet(name, key, value string) (*Result, error) {
+	return c.sendResult(MethodSessionStorage, SessionStorageParams{SessionName: name, Action: "set", Key: key, Value: value})
+}
+
+// SessionStorageDelete deletes a sessionStorage item in a daemon session.
+func (c *Client) SessionStorageDelete(name, key string) (*Result, error) {
+	return c.sendResult(MethodSessionStorage, SessionStorageParams{SessionName: name, Action: "delete", Key: key})
+}
+
+// SessionStorageClear clears sessionStorage in a daemon session.
+func (c *Client) SessionStorageClear(name string) (*Result, error) {
+	return c.sendResult(MethodSessionStorage, SessionStorageParams{SessionName: name, Action: "clear"})
+}
+
 // Stop stops the daemon server
 func (c *Client) Stop() (*Result, error) {
 	return c.sendResult(MethodStop, nil)
+}
+
+// CloseAll closes all sessions in the daemon.
+func (c *Client) CloseAll() (*Result, error) {
+	return c.sendResult(MethodCloseAll, nil)
 }
 
 func (c *Client) sendResult(method string, params interface{}) (*Result, error) {

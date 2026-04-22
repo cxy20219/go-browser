@@ -37,6 +37,7 @@ type Server struct {
 	pid        int
 	stopCh     chan struct{}
 	stopping   bool
+	headless   bool // true = headless, false = headed
 }
 
 var globalServer *Server
@@ -77,7 +78,7 @@ func IsWindows() bool {
 }
 
 // NewServer creates a new daemon server
-func NewServer() (*Server, error) {
+func NewServer(headless bool) (*Server, error) {
 	socketPath := GetSocketPath()
 
 	// Initialize Playwright
@@ -96,6 +97,7 @@ func NewServer() (*Server, error) {
 		socketPath: socketPath,
 		pid:        os.Getpid(),
 		stopCh:     make(chan struct{}),
+		headless:   headless,
 	}
 
 	globalServer = s
@@ -264,6 +266,8 @@ func (s *Server) handleRequest(req *Request) *Response {
 		result, err = s.handleSnapshot(req.Params)
 	case MethodScreenshot:
 		result, err = s.handleScreenshot(req.Params)
+	case MethodPdf:
+		result, err = s.handlePdf(req.Params)
 	case MethodClick:
 		result, err = s.handleClick(req.Params)
 	case MethodFill:
@@ -310,6 +314,30 @@ func (s *Server) handleRequest(req *Request) *Response {
 		result, err = s.handleDrag(req.Params)
 	case MethodUpload:
 		result, err = s.handleUpload(req.Params)
+	case MethodStateSave:
+		result, err = s.handleStateSave(req.Params)
+	case MethodStateLoad:
+		result, err = s.handleStateLoad(req.Params)
+	case MethodDialogAccept:
+		result, err = s.handleDialogAccept(req.Params)
+	case MethodDialogDismiss:
+		result, err = s.handleDialogDismiss(req.Params)
+	case MethodCookieList:
+		result, err = s.handleCookieList(req.Params)
+	case MethodCookieGet:
+		result, err = s.handleCookieGet(req.Params)
+	case MethodCookieSet:
+		result, err = s.handleCookieSet(req.Params)
+	case MethodCookieDelete:
+		result, err = s.handleCookieDelete(req.Params)
+	case MethodCookieClear:
+		result, err = s.handleCookieClear(req.Params)
+	case MethodLocalStorage:
+		result, err = s.handleLocalStorage(req.Params)
+	case MethodSessionStorage:
+		result, err = s.handleSessionStorage(req.Params)
+	case MethodCloseAll:
+		result, err = s.handleCloseAll()
 	case MethodListSessions:
 		result = s.handleListSessions()
 	default:
@@ -415,10 +443,14 @@ func (s *Server) handleOpen(paramsJSON json.RawMessage) (*Result, error) {
 		browserType = "chromium"
 	}
 
+	// Use daemon's headless setting - the daemon's mode (set at startup via --headed)
+	// is authoritative for all browser launches in this daemon
+	headless := s.headless
+
 	browserImpl := browser.NewLocalBrowser()
 	result, err := browserImpl.Launch(&session.SessionOptions{
 		Browser:  browserType,
-		Headless: params.Headless,
+		Headless: headless,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to launch browser: %w", err)
@@ -662,6 +694,34 @@ func (s *Server) handleScreenshot(paramsJSON json.RawMessage) (*Result, error) {
 		Screenshot: &ScreenshotInfo{
 			Path: filename,
 			Size: len(img),
+		},
+	}, nil
+}
+
+func (s *Server) handlePdf(paramsJSON json.RawMessage) (*Result, error) {
+	var params SessionParams
+	if err := json.Unmarshal(paramsJSON, &params); err != nil {
+		return nil, err
+	}
+
+	page, err := s.pageForSession(params.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	filename := fmt.Sprintf("page-%s.pdf", time.Now().Format("2006-01-02T15-04-05"))
+	_, err = page.PDF(playwright.PagePdfOptions{
+		Path: &filename,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("pdf failed: %w", err)
+	}
+
+	return &Result{
+		Success: true,
+		Message: fmt.Sprintf("PDF saved to %s", filename),
+		Pdf: &PdfInfo{
+			Path: filename,
 		},
 	}, nil
 }
@@ -1208,6 +1268,493 @@ func (s *Server) handleUpload(paramsJSON json.RawMessage) (*Result, error) {
 	return &Result{Success: true, Message: "Uploaded"}, nil
 }
 
+func (s *Server) handleStateSave(paramsJSON json.RawMessage) (*Result, error) {
+	var params StateParams
+	if err := json.Unmarshal(paramsJSON, &params); err != nil {
+		return nil, err
+	}
+
+	_, handle, err := s.pageAndHandleForSession(params.SessionName)
+	if err != nil {
+		return nil, err
+	}
+
+	if handle.Context == nil {
+		return nil, fmt.Errorf("no browser context")
+	}
+
+	filename := params.Filename
+	if filename == "" {
+		filename = fmt.Sprintf("storage-state-%d.json", os.Getpid())
+	}
+
+	state, err := handle.Context.StorageState()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get storage state: %w", err)
+	}
+
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal state: %w", err)
+	}
+
+	if err := os.WriteFile(filename, data, 0644); err != nil {
+		return nil, fmt.Errorf("failed to write state file: %w", err)
+	}
+
+	return &Result{Success: true, Message: fmt.Sprintf("State saved to %s", filename)}, nil
+}
+
+func (s *Server) handleStateLoad(paramsJSON json.RawMessage) (*Result, error) {
+	var params StateParams
+	if err := json.Unmarshal(paramsJSON, &params); err != nil {
+		return nil, err
+	}
+
+	_, handle, err := s.pageAndHandleForSession(params.SessionName)
+	if err != nil {
+		return nil, err
+	}
+
+	if handle.Context == nil {
+		return nil, fmt.Errorf("no browser context")
+	}
+
+	filename := params.Filename
+	if filename == "" {
+		return nil, fmt.Errorf("filename required")
+	}
+
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read state file: %w", err)
+	}
+
+	var state playwright.StorageState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return nil, fmt.Errorf("failed to parse state file: %w", err)
+	}
+
+	cookies := make([]playwright.OptionalCookie, len(state.Cookies))
+	for i, c := range state.Cookies {
+		cookies[i] = playwright.OptionalCookie{
+			Name:  c.Name,
+			Value: c.Value,
+		}
+		if c.Domain != "" {
+			cookies[i].Domain = &c.Domain
+		}
+		if c.Path != "" {
+			cookies[i].Path = &c.Path
+		}
+		if c.Expires != 0 {
+			cookies[i].Expires = &c.Expires
+		}
+		if c.HttpOnly {
+			cookies[i].HttpOnly = &c.HttpOnly
+		}
+		if c.Secure {
+			cookies[i].Secure = &c.Secure
+		}
+		if c.SameSite != nil && *c.SameSite != "" {
+			cookies[i].SameSite = c.SameSite
+		}
+	}
+
+	if err := handle.Context.AddCookies(cookies); err != nil {
+		return nil, fmt.Errorf("failed to add cookies: %w", err)
+	}
+
+	return &Result{Success: true, Message: fmt.Sprintf("State loaded from %s", filename)}, nil
+}
+
+func (s *Server) handleDialogAccept(paramsJSON json.RawMessage) (*Result, error) {
+	var params DialogParams
+	if err := json.Unmarshal(paramsJSON, &params); err != nil {
+		return nil, err
+	}
+
+	page, _, err := s.pageAndHandleForSession(params.SessionName)
+	if err != nil {
+		return nil, err
+	}
+
+	promptText := params.PromptText
+	if promptText != "" {
+		page.OnDialog(func(dialog playwright.Dialog) {
+			dialog.Accept(promptText)
+		})
+	} else {
+		page.OnDialog(func(dialog playwright.Dialog) {
+			dialog.Accept()
+		})
+	}
+
+	return &Result{Success: true, Message: "Dialog accepted"}, nil
+}
+
+func (s *Server) handleDialogDismiss(paramsJSON json.RawMessage) (*Result, error) {
+	var params DialogParams
+	if err := json.Unmarshal(paramsJSON, &params); err != nil {
+		return nil, err
+	}
+
+	page, _, err := s.pageAndHandleForSession(params.SessionName)
+	if err != nil {
+		return nil, err
+	}
+
+	page.OnDialog(func(dialog playwright.Dialog) {
+		dialog.Dismiss()
+	})
+
+	return &Result{Success: true, Message: "Dialog dismissed"}, nil
+}
+
+func (s *Server) handleCookieList(paramsJSON json.RawMessage) (*Result, error) {
+	var params SessionParams
+	if err := json.Unmarshal(paramsJSON, &params); err != nil {
+		return nil, err
+	}
+
+	_, handle, err := s.pageAndHandleForSession(params.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	if handle.Context == nil {
+		return nil, fmt.Errorf("no browser context")
+	}
+
+	cookies, err := handle.Context.Cookies()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get cookies: %w", err)
+	}
+
+	cookieInfos := make([]CookieInfo, len(cookies))
+	for i, c := range cookies {
+		cookieInfos[i] = CookieInfo{
+			Name:     c.Name,
+			Value:    c.Value,
+			Domain:   c.Domain,
+			Path:     c.Path,
+			Expires:  int64(c.Expires),
+			HTTPOnly: c.HttpOnly,
+			Secure:   c.Secure,
+		}
+	}
+
+	return &Result{Success: true, Message: fmt.Sprintf("%d cookies", len(cookies)), Cookies: cookieInfos}, nil
+}
+
+func (s *Server) handleCookieGet(paramsJSON json.RawMessage) (*Result, error) {
+	var params CookieParams
+	if err := json.Unmarshal(paramsJSON, &params); err != nil {
+		return nil, err
+	}
+
+	_, handle, err := s.pageAndHandleForSession(params.SessionName)
+	if err != nil {
+		return nil, err
+	}
+
+	if handle.Context == nil {
+		return nil, fmt.Errorf("no browser context")
+	}
+
+	cookies, err := handle.Context.Cookies()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get cookies: %w", err)
+	}
+
+	for _, c := range cookies {
+		if c.Name == params.Name {
+			return &Result{
+				Success: true,
+				Value:   c.Value,
+				Message: fmt.Sprintf("%s=%s", c.Name, c.Value),
+				Cookies: []CookieInfo{{
+					Name:     c.Name,
+					Value:    c.Value,
+					Domain:   c.Domain,
+					Path:     c.Path,
+					Expires:  int64(c.Expires),
+					HTTPOnly: c.HttpOnly,
+					Secure:   c.Secure,
+				}},
+			}, nil
+		}
+	}
+
+	return nil, fmt.Errorf("cookie not found: %s", params.Name)
+}
+
+func (s *Server) handleCookieSet(paramsJSON json.RawMessage) (*Result, error) {
+	var params CookieParams
+	if err := json.Unmarshal(paramsJSON, &params); err != nil {
+		return nil, err
+	}
+
+	_, handle, err := s.pageAndHandleForSession(params.SessionName)
+	if err != nil {
+		return nil, err
+	}
+
+	if handle.Context == nil {
+		return nil, fmt.Errorf("no browser context")
+	}
+
+	cookie := playwright.OptionalCookie{
+		Name:  params.Name,
+		Value: params.Value,
+	}
+
+	if params.Domain != "" {
+		cookie.Domain = &params.Domain
+	}
+	if params.Path != "" {
+		cookie.Path = &params.Path
+	}
+	if params.Expires != 0 {
+		exp := float64(params.Expires)
+		cookie.Expires = &exp
+	}
+	if params.HTTPOnly {
+		cookie.HttpOnly = &params.HTTPOnly
+	}
+	if params.Secure {
+		cookie.Secure = &params.Secure
+	}
+
+	if err := handle.Context.AddCookies([]playwright.OptionalCookie{cookie}); err != nil {
+		return nil, fmt.Errorf("failed to set cookie: %w", err)
+	}
+
+	return &Result{Success: true, Message: fmt.Sprintf("Cookie set: %s=%s", params.Name, params.Value)}, nil
+}
+
+func (s *Server) handleCookieDelete(paramsJSON json.RawMessage) (*Result, error) {
+	var params CookieParams
+	if err := json.Unmarshal(paramsJSON, &params); err != nil {
+		return nil, err
+	}
+
+	_, handle, err := s.pageAndHandleForSession(params.SessionName)
+	if err != nil {
+		return nil, err
+	}
+
+	if handle.Context == nil {
+		return nil, fmt.Errorf("no browser context")
+	}
+
+	if err := handle.Context.ClearCookies(playwright.BrowserContextClearCookiesOptions{
+		Name: &params.Name,
+	}); err != nil {
+		return nil, fmt.Errorf("failed to delete cookie: %w", err)
+	}
+
+	return &Result{Success: true, Message: fmt.Sprintf("Cookie deleted: %s", params.Name)}, nil
+}
+
+func (s *Server) handleCookieClear(paramsJSON json.RawMessage) (*Result, error) {
+	var params SessionParams
+	if err := json.Unmarshal(paramsJSON, &params); err != nil {
+		return nil, err
+	}
+
+	_, handle, err := s.pageAndHandleForSession(params.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	if handle.Context == nil {
+		return nil, fmt.Errorf("no browser context")
+	}
+
+	if err := handle.Context.ClearCookies(); err != nil {
+		return nil, fmt.Errorf("failed to clear cookies: %w", err)
+	}
+
+	return &Result{Success: true, Message: "All cookies cleared"}, nil
+}
+
+func (s *Server) handleLocalStorage(paramsJSON json.RawMessage) (*Result, error) {
+	var params LocalStorageParams
+	if err := json.Unmarshal(paramsJSON, &params); err != nil {
+		return nil, err
+	}
+
+	page, _, err := s.pageAndHandleForSession(params.SessionName)
+	if err != nil {
+		return nil, err
+	}
+
+	switch params.Action {
+	case "list":
+		items, err := page.Evaluate(`() => {
+			let items = [];
+			for (let i = 0; i < localStorage.length; i++) {
+				let key = localStorage.key(i);
+				items.push({ key, value: localStorage.getItem(key) });
+			}
+			return items;
+		}`, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list localStorage: %w", err)
+		}
+		if items == nil {
+			return &Result{Success: true, Message: "No localStorage items", Storage: &StorageInfo{}}, nil
+		}
+		if itemList, ok := items.([]interface{}); ok {
+			storageItems := make([]StorageItem, len(itemList))
+			for i, item := range itemList {
+				if m, ok := item.(map[string]interface{}); ok {
+					if key, ok := m["key"].(string); ok {
+						storageItems[i].Key = key
+					}
+					if value, ok := m["value"].(string); ok {
+						storageItems[i].Value = value
+					}
+				}
+			}
+			return &Result{Success: true, Message: fmt.Sprintf("localStorage items: %d", len(storageItems)), Storage: &StorageInfo{Items: storageItems}}, nil
+		}
+		return &Result{Success: true, Message: fmt.Sprintf("localStorage: %v", items)}, nil
+
+	case "get":
+		if params.Key == "" {
+			return nil, fmt.Errorf("key required")
+		}
+		result, err := page.Evaluate(fmt.Sprintf(`() => localStorage.getItem('%s')`, params.Key), nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get localStorage item: %w", err)
+		}
+		if result == nil {
+			return &Result{Success: true, Message: fmt.Sprintf("localStorage['%s'] not found", params.Key)}, nil
+		}
+		return &Result{Success: true, Value: result, Message: fmt.Sprintf("%v", result)}, nil
+
+	case "set":
+		if params.Key == "" {
+			return nil, fmt.Errorf("key required")
+		}
+		_, err := page.Evaluate(fmt.Sprintf(`() => { localStorage.setItem('%s', '%s'); }`, params.Key, params.Value), nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to set localStorage item: %w", err)
+		}
+		return &Result{Success: true, Message: fmt.Sprintf("localStorage['%s'] = %s", params.Key, params.Value)}, nil
+
+	case "delete":
+		if params.Key == "" {
+			return nil, fmt.Errorf("key required")
+		}
+		_, err := page.Evaluate(fmt.Sprintf(`() => { localStorage.removeItem('%s'); }`, params.Key), nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to delete localStorage item: %w", err)
+		}
+		return &Result{Success: true, Message: fmt.Sprintf("localStorage['%s'] deleted", params.Key)}, nil
+
+	case "clear":
+		_, err := page.Evaluate(`() => { localStorage.clear(); }`, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to clear localStorage: %w", err)
+		}
+		return &Result{Success: true, Message: "localStorage cleared"}, nil
+
+	default:
+		return nil, fmt.Errorf("unknown action: %s", params.Action)
+	}
+}
+
+func (s *Server) handleSessionStorage(paramsJSON json.RawMessage) (*Result, error) {
+	var params SessionStorageParams
+	if err := json.Unmarshal(paramsJSON, &params); err != nil {
+		return nil, err
+	}
+
+	page, _, err := s.pageAndHandleForSession(params.SessionName)
+	if err != nil {
+		return nil, err
+	}
+
+	switch params.Action {
+	case "list":
+		items, err := page.Evaluate(`() => {
+			let items = [];
+			for (let i = 0; i < sessionStorage.length; i++) {
+				let key = sessionStorage.key(i);
+				items.push({ key, value: sessionStorage.getItem(key) });
+			}
+			return items;
+		}`, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list sessionStorage: %w", err)
+		}
+		if items == nil {
+			return &Result{Success: true, Message: "No sessionStorage items", Storage: &StorageInfo{}}, nil
+		}
+		if itemList, ok := items.([]interface{}); ok {
+			storageItems := make([]StorageItem, len(itemList))
+			for i, item := range itemList {
+				if m, ok := item.(map[string]interface{}); ok {
+					if key, ok := m["key"].(string); ok {
+						storageItems[i].Key = key
+					}
+					if value, ok := m["value"].(string); ok {
+						storageItems[i].Value = value
+					}
+				}
+			}
+			return &Result{Success: true, Message: fmt.Sprintf("sessionStorage items: %d", len(storageItems)), Storage: &StorageInfo{Items: storageItems}}, nil
+		}
+		return &Result{Success: true, Message: fmt.Sprintf("sessionStorage: %v", items)}, nil
+
+	case "get":
+		if params.Key == "" {
+			return nil, fmt.Errorf("key required")
+		}
+		result, err := page.Evaluate(fmt.Sprintf(`() => sessionStorage.getItem('%s')`, params.Key), nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get sessionStorage item: %w", err)
+		}
+		if result == nil {
+			return &Result{Success: true, Message: fmt.Sprintf("sessionStorage['%s'] not found", params.Key)}, nil
+		}
+		return &Result{Success: true, Value: result, Message: fmt.Sprintf("%v", result)}, nil
+
+	case "set":
+		if params.Key == "" {
+			return nil, fmt.Errorf("key required")
+		}
+		_, err := page.Evaluate(fmt.Sprintf(`() => { sessionStorage.setItem('%s', '%s'); }`, params.Key, params.Value), nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to set sessionStorage item: %w", err)
+		}
+		return &Result{Success: true, Message: fmt.Sprintf("sessionStorage['%s'] = %s", params.Key, params.Value)}, nil
+
+	case "delete":
+		if params.Key == "" {
+			return nil, fmt.Errorf("key required")
+		}
+		_, err := page.Evaluate(fmt.Sprintf(`() => { sessionStorage.removeItem('%s'); }`, params.Key), nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to delete sessionStorage item: %w", err)
+		}
+		return &Result{Success: true, Message: fmt.Sprintf("sessionStorage['%s'] deleted", params.Key)}, nil
+
+	case "clear":
+		_, err := page.Evaluate(`() => { sessionStorage.clear(); }`, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to clear sessionStorage: %w", err)
+		}
+		return &Result{Success: true, Message: "sessionStorage cleared"}, nil
+
+	default:
+		return nil, fmt.Errorf("unknown action: %s", params.Action)
+	}
+}
+
 func (s *Server) handleListSessions() *Result {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1222,6 +1769,29 @@ func (s *Server) handleListSessions() *Result {
 		Message:  fmt.Sprintf("%d sessions", len(sessions)),
 		Sessions: sessions,
 	}
+}
+
+func (s *Server) handleCloseAll() (*Result, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	count := 0
+	for name, handle := range s.browsers {
+		if handle.Context != nil {
+			handle.Context.Close()
+		}
+		if handle.Browser != nil {
+			handle.Browser.Close()
+		}
+		delete(s.browsers, name)
+		s.sessions.Delete(name)
+		count++
+	}
+
+	return &Result{
+		Success: true,
+		Message: fmt.Sprintf("Closed %d sessions", count),
+	}, nil
 }
 
 func tabInfos(handle *BrowserHandle) []TabInfo {

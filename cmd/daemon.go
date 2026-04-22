@@ -168,7 +168,9 @@ var daemonCmd = &cobra.Command{
 	Short:  "Internal command to run daemon server",
 	Hidden: true,
 	RunE: func(c *cobra.Command, args []string) error {
-		server, err := daemon.NewServer()
+		// headed mode means headless=false
+		headless := !daemonHeaded
+		server, err := daemon.NewServer(headless)
 		if err != nil {
 			return fmt.Errorf("failed to create server: %w", err)
 		}

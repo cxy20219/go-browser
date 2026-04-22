@@ -15,7 +15,7 @@ var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all browser sessions",
 	RunE: func(c *cobra.Command, args []string) error {
-		if daemon.IsDaemonRunning() && cmd.GetCDPURL() == "" && !cmd.GetAttachExt() && cmd.GetRemoteURL() == "" {
+		if daemonMode() {
 			client, err := daemon.NewClient()
 			if err == nil {
 				defer client.Close()
@@ -52,7 +52,6 @@ var listCmd = &cobra.Command{
 			}
 			active := pm.IsActive(state)
 			if !active {
-				// Clean up inactive session
 				pm.Delete(name)
 				continue
 			}
@@ -102,6 +101,18 @@ var closeAllCmd = &cobra.Command{
 	Use:   "close-all",
 	Short: "Close all browser sessions",
 	RunE: func(c *cobra.Command, args []string) error {
+		if daemonMode() {
+			client, err := daemon.NewClient()
+			if err == nil {
+				defer client.Close()
+				result, err := client.CloseAll()
+				if err == nil && result.Success {
+					fmt.Println(result.Message)
+					return nil
+				}
+			}
+		}
+
 		pm := session.GetPersistenceManager()
 		names := pm.List()
 
@@ -125,6 +136,18 @@ var killAllCmd = &cobra.Command{
 	Use:   "kill-all",
 	Short: "Forcefully kill all browser processes",
 	RunE: func(c *cobra.Command, args []string) error {
+		if daemonMode() {
+			client, err := daemon.NewClient()
+			if err == nil {
+				defer client.Close()
+				result, err := client.CloseAll()
+				if err == nil && result.Success {
+					fmt.Println(result.Message)
+					return nil
+				}
+			}
+		}
+
 		pm := session.GetPersistenceManager()
 		names := pm.List()
 

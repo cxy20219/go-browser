@@ -966,6 +966,26 @@ var dialogAcceptCmd = &cobra.Command{
 	Args:  cobra.RangeArgs(0, 1),
 	RunE: func(c *cobra.Command, args []string) error {
 		formatter := output.NewFormatter(cmd.GetRaw())
+		text := ""
+		if len(args) > 0 {
+			text = args[0]
+		}
+		if daemonMode() {
+			client, err := daemon.NewClient()
+			if err != nil {
+				return err
+			}
+			defer client.Close()
+			result, err := client.DialogAccept(cmd.GetSessionName(), text)
+			if err != nil {
+				return err
+			}
+			if !result.Success {
+				return fmt.Errorf("daemon dialog-accept failed: %s", result.Message)
+			}
+			return printDaemonSnapshot(formatter, client, cmd.GetSessionName())
+		}
+
 		sess, err := cmd.GetSession()
 		if err != nil {
 			return err
@@ -974,11 +994,6 @@ var dialogAcceptCmd = &cobra.Command{
 		page, err := sess.CurrentActivePage()
 		if err != nil {
 			return err
-		}
-
-		text := ""
-		if len(args) > 0 {
-			text = args[0]
 		}
 
 		// Set up dialog handler
@@ -1007,6 +1022,22 @@ var dialogDismissCmd = &cobra.Command{
 	Short: "Dismiss a dialog",
 	RunE: func(c *cobra.Command, args []string) error {
 		formatter := output.NewFormatter(cmd.GetRaw())
+		if daemonMode() {
+			client, err := daemon.NewClient()
+			if err != nil {
+				return err
+			}
+			defer client.Close()
+			result, err := client.DialogDismiss(cmd.GetSessionName())
+			if err != nil {
+				return err
+			}
+			if !result.Success {
+				return fmt.Errorf("daemon dialog-dismiss failed: %s", result.Message)
+			}
+			return printDaemonSnapshot(formatter, client, cmd.GetSessionName())
+		}
+
 		sess, err := cmd.GetSession()
 		if err != nil {
 			return err

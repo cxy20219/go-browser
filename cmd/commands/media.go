@@ -88,9 +88,11 @@ var pdfCmd = &cobra.Command{
 			if err == nil {
 				defer client.Close()
 
-				result, err := client.Screenshot(cmd.GetSessionName())
+				result, err := client.Pdf(cmd.GetSessionName())
 				if err == nil && result.Success {
-					fmt.Printf("Screenshot saved to %s\n", result.Screenshot.Path)
+					if result.Pdf != nil {
+						fmt.Printf("PDF saved to %s\n", result.Pdf.Path)
+					}
 					return printDaemonSnapshot(formatter, client, cmd.GetSessionName())
 				}
 			}

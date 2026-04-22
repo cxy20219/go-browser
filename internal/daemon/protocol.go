@@ -158,6 +158,46 @@ type UncheckParams struct {
 	Locator     string `json:"locator"`
 }
 
+// StateParams for state operations.
+type StateParams struct {
+	SessionName string `json:"session_name,omitempty"`
+	Filename    string `json:"filename,omitempty"`
+}
+
+// DialogParams for dialog operations.
+type DialogParams struct {
+	SessionName string `json:"session_name,omitempty"`
+	PromptText  string `json:"prompt_text,omitempty"`
+}
+
+// CookieParams for cookie operations.
+type CookieParams struct {
+	SessionName string `json:"session_name,omitempty"`
+	Name        string `json:"name,omitempty"`
+	Value       string `json:"value,omitempty"`
+	Domain      string `json:"domain,omitempty"`
+	Path        string `json:"path,omitempty"`
+	Expires     int64  `json:"expires,omitempty"`
+	HTTPOnly    bool   `json:"http_only,omitempty"`
+	Secure      bool   `json:"secure,omitempty"`
+}
+
+// LocalStorageParams for localStorage operations.
+type LocalStorageParams struct {
+	SessionName string `json:"session_name,omitempty"`
+	Action      string `json:"action"` // get, set, delete, clear
+	Key         string `json:"key,omitempty"`
+	Value       string `json:"value,omitempty"`
+}
+
+// SessionStorageParams for sessionStorage operations.
+type SessionStorageParams struct {
+	SessionName string `json:"session_name,omitempty"`
+	Action      string `json:"action"` // list, get, set, delete, clear
+	Key         string `json:"key,omitempty"`
+	Value       string `json:"value,omitempty"`
+}
+
 // Result represents a generic result
 type Result struct {
 	Success    bool            `json:"success"`
@@ -168,6 +208,9 @@ type Result struct {
 	Tabs       []TabInfo       `json:"tabs,omitempty"`
 	Snapshot   *SnapshotInfo   `json:"snapshot,omitempty"`
 	Screenshot *ScreenshotInfo `json:"screenshot,omitempty"`
+	Pdf        *PdfInfo        `json:"pdf,omitempty"`
+	Cookies    []CookieInfo    `json:"cookies,omitempty"`
+	Storage    *StorageInfo    `json:"storage,omitempty"`
 }
 
 // SessionInfo information about a session
@@ -209,6 +252,34 @@ type ElementRef struct {
 type ScreenshotInfo struct {
 	Path string `json:"path"`
 	Size int    `json:"size"`
+}
+
+// PdfInfo PDF generation result
+type PdfInfo struct {
+	Path string `json:"path"`
+	Size int    `json:"size"`
+}
+
+// CookieInfo cookie information
+type CookieInfo struct {
+	Name     string `json:"name"`
+	Value    string `json:"value"`
+	Domain   string `json:"domain"`
+	Path     string `json:"path"`
+	Expires  int64  `json:"expires"`
+	HTTPOnly bool   `json:"http_only"`
+	Secure   bool   `json:"secure"`
+}
+
+// StorageInfo storage information
+type StorageInfo struct {
+	Items []StorageItem `json:"items,omitempty"`
+}
+
+// StorageItem represents a single storage item
+type StorageItem struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
 }
 
 // DaemonInfo daemon status
@@ -256,4 +327,17 @@ const (
 	MethodCheck        = "check"
 	MethodUncheck      = "uncheck"
 	MethodDblClick     = "dblclick"
+	MethodPdf          = "pdf"
+	MethodStateSave    = "state_save"
+	MethodStateLoad    = "state_load"
+	MethodDialogAccept = "dialog_accept"
+	MethodDialogDismiss = "dialog_dismiss"
+	MethodCookieList   = "cookie_list"
+	MethodCookieGet    = "cookie_get"
+	MethodCookieSet    = "cookie_set"
+	MethodCookieDelete = "cookie_delete"
+	MethodCookieClear  = "cookie_clear"
+	MethodLocalStorage   = "local_storage"
+	MethodSessionStorage = "session_storage"
+	MethodCloseAll      = "close_all"
 )

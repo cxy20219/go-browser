@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/browserless/go-cli-browser/cmd"
+	"github.com/browserless/go-cli-browser/internal/daemon"
 	"github.com/playwright-community/playwright-go"
 	"github.com/spf13/cobra"
 )
@@ -23,6 +24,27 @@ var stateSaveCmd = &cobra.Command{
 	Short: "Save browser state",
 	Args:  cobra.RangeArgs(0, 1),
 	RunE: func(c *cobra.Command, args []string) error {
+		filename := ""
+		if len(args) > 0 {
+			filename = args[0]
+		}
+		if daemonMode() {
+			client, err := daemon.NewClient()
+			if err != nil {
+				return err
+			}
+			defer client.Close()
+			result, err := client.StateSave(cmd.GetSessionName(), filename)
+			if err != nil {
+				return err
+			}
+			if !result.Success {
+				return fmt.Errorf("daemon state-save failed: %s", result.Message)
+			}
+			fmt.Println(result.Message)
+			return nil
+		}
+
 		sess, err := cmd.GetSession()
 		if err != nil {
 			return err
@@ -33,18 +55,13 @@ var stateSaveCmd = &cobra.Command{
 			return fmt.Errorf("no browser context")
 		}
 
-		filename := ""
-		if len(args) > 0 {
-			filename = args[0]
+		if filename == "" {
+			filename = fmt.Sprintf("storage-state-%d.json", os.Getpid())
 		}
 
 		state, err := ctx.StorageState()
 		if err != nil {
 			return fmt.Errorf("failed to get storage state: %w", err)
-		}
-
-		if filename == "" {
-			filename = fmt.Sprintf("storage-state-%d.json", os.Getpid())
 		}
 
 		data, err := json.MarshalIndent(state, "", "  ")
@@ -67,6 +84,27 @@ var stateLoadCmd = &cobra.Command{
 	Short: "Load browser state",
 	Args:  cobra.RangeArgs(0, 1),
 	RunE: func(c *cobra.Command, args []string) error {
+		filename := ""
+		if len(args) > 0 {
+			filename = args[0]
+		}
+		if daemonMode() {
+			client, err := daemon.NewClient()
+			if err != nil {
+				return err
+			}
+			defer client.Close()
+			result, err := client.StateLoad(cmd.GetSessionName(), filename)
+			if err != nil {
+				return err
+			}
+			if !result.Success {
+				return fmt.Errorf("daemon state-load failed: %s", result.Message)
+			}
+			fmt.Println(result.Message)
+			return nil
+		}
+
 		sess, err := cmd.GetSession()
 		if err != nil {
 			return err
@@ -75,11 +113,6 @@ var stateLoadCmd = &cobra.Command{
 		ctx := sess.Context
 		if ctx == nil {
 			return fmt.Errorf("no browser context")
-		}
-
-		filename := ""
-		if len(args) > 0 {
-			filename = args[0]
 		}
 
 		if filename == "" {
@@ -137,6 +170,29 @@ var cookieListCmd = &cobra.Command{
 	Use:   "cookie-list",
 	Short: "List cookies",
 	RunE: func(c *cobra.Command, args []string) error {
+		if daemonMode() {
+			client, err := daemon.NewClient()
+			if err != nil {
+				return err
+			}
+			defer client.Close()
+			result, err := client.CookieList(cmd.GetSessionName())
+			if err != nil {
+				return err
+			}
+			if !result.Success {
+				return fmt.Errorf("daemon cookie-list failed: %s", result.Message)
+			}
+			if len(result.Cookies) == 0 {
+				fmt.Println("No cookies")
+				return nil
+			}
+			for _, c := range result.Cookies {
+				fmt.Printf("%s=%s; Domain=%s; Path=%s\n", c.Name, c.Value, c.Domain, c.Path)
+			}
+			return nil
+		}
+
 		sess, err := cmd.GetSession()
 		if err != nil {
 			return err
@@ -171,6 +227,30 @@ var cookieGetCmd = &cobra.Command{
 	Short: "Get a cookie",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(c *cobra.Command, args []string) error {
+		if daemonMode() {
+			client, err := daemon.NewClient()
+			if err != nil {
+				return err
+			}
+			defer client.Close()
+			result, err := client.CookieGet(cmd.GetSessionName(), args[0])
+			if err != nil {
+				return err
+			}
+			if !result.Success {
+				return fmt.Errorf("daemon cookie-get failed: %s", result.Message)
+			}
+			if len(result.Cookies) > 0 {
+				c := result.Cookies[0]
+				fmt.Printf("%s=%s\n", c.Name, c.Value)
+				fmt.Printf("  Domain: %s\n", c.Domain)
+				fmt.Printf("  Path: %s\n", c.Path)
+				fmt.Printf("  HTTPOnly: %v\n", c.HTTPOnly)
+				fmt.Printf("  Secure: %v\n", c.Secure)
+			}
+			return nil
+		}
+
 		sess, err := cmd.GetSession()
 		if err != nil {
 			return err
@@ -208,6 +288,23 @@ var cookieSetCmd = &cobra.Command{
 	Short: "Set a cookie",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(c *cobra.Command, args []string) error {
+		if daemonMode() {
+			client, err := daemon.NewClient()
+			if err != nil {
+				return err
+			}
+			defer client.Close()
+			result, err := client.CookieSet(cmd.GetSessionName(), args[0], args[1], cookieDomain, "", 0, cookieHTTPOnly, cookieSecure)
+			if err != nil {
+				return err
+			}
+			if !result.Success {
+				return fmt.Errorf("daemon cookie-set failed: %s", result.Message)
+			}
+			fmt.Println(result.Message)
+			return nil
+		}
+
 		sess, err := cmd.GetSession()
 		if err != nil {
 			return err
@@ -254,6 +351,23 @@ var cookieDeleteCmd = &cobra.Command{
 	Short: "Delete a cookie",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(c *cobra.Command, args []string) error {
+		if daemonMode() {
+			client, err := daemon.NewClient()
+			if err != nil {
+				return err
+			}
+			defer client.Close()
+			result, err := client.CookieDelete(cmd.GetSessionName(), args[0])
+			if err != nil {
+				return err
+			}
+			if !result.Success {
+				return fmt.Errorf("daemon cookie-delete failed: %s", result.Message)
+			}
+			fmt.Println(result.Message)
+			return nil
+		}
+
 		sess, err := cmd.GetSession()
 		if err != nil {
 			return err
@@ -282,6 +396,23 @@ var cookieClearCmd = &cobra.Command{
 	Use:   "cookie-clear",
 	Short: "Clear all cookies",
 	RunE: func(c *cobra.Command, args []string) error {
+		if daemonMode() {
+			client, err := daemon.NewClient()
+			if err != nil {
+				return err
+			}
+			defer client.Close()
+			result, err := client.CookieClear(cmd.GetSessionName())
+			if err != nil {
+				return err
+			}
+			if !result.Success {
+				return fmt.Errorf("daemon cookie-clear failed: %s", result.Message)
+			}
+			fmt.Println(result.Message)
+			return nil
+		}
+
 		sess, err := cmd.GetSession()
 		if err != nil {
 			return err
@@ -306,6 +437,29 @@ var localstorageListCmd = &cobra.Command{
 	Use:   "localstorage-list",
 	Short: "List localStorage",
 	RunE: func(c *cobra.Command, args []string) error {
+		if daemonMode() {
+			client, err := daemon.NewClient()
+			if err != nil {
+				return err
+			}
+			defer client.Close()
+			result, err := client.LocalStorageList(cmd.GetSessionName())
+			if err != nil {
+				return err
+			}
+			if !result.Success {
+				return fmt.Errorf("daemon localstorage-list failed: %s", result.Message)
+			}
+			if result.Storage == nil || len(result.Storage.Items) == 0 {
+				fmt.Println("No localStorage items")
+				return nil
+			}
+			for _, item := range result.Storage.Items {
+				fmt.Printf("%s: %s\n", item.Key, item.Value)
+			}
+			return nil
+		}
+
 		sess, err := cmd.GetSession()
 		if err != nil {
 			return err
@@ -345,6 +499,23 @@ var localstorageGetCmd = &cobra.Command{
 	Short: "Get localStorage item",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(c *cobra.Command, args []string) error {
+		if daemonMode() {
+			client, err := daemon.NewClient()
+			if err != nil {
+				return err
+			}
+			defer client.Close()
+			result, err := client.LocalStorageGet(cmd.GetSessionName(), args[0])
+			if err != nil {
+				return err
+			}
+			if !result.Success {
+				return fmt.Errorf("daemon localstorage-get failed: %s", result.Message)
+			}
+			fmt.Println(result.Message)
+			return nil
+		}
+
 		sess, err := cmd.GetSession()
 		if err != nil {
 			return err
@@ -377,6 +548,23 @@ var localstorageSetCmd = &cobra.Command{
 	Short: "Set localStorage item",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(c *cobra.Command, args []string) error {
+		if daemonMode() {
+			client, err := daemon.NewClient()
+			if err != nil {
+				return err
+			}
+			defer client.Close()
+			result, err := client.LocalStorageSet(cmd.GetSessionName(), args[0], args[1])
+			if err != nil {
+				return err
+			}
+			if !result.Success {
+				return fmt.Errorf("daemon localstorage-set failed: %s", result.Message)
+			}
+			fmt.Println(result.Message)
+			return nil
+		}
+
 		sess, err := cmd.GetSession()
 		if err != nil {
 			return err
@@ -406,6 +594,23 @@ var localstorageDeleteCmd = &cobra.Command{
 	Short: "Delete localStorage item",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(c *cobra.Command, args []string) error {
+		if daemonMode() {
+			client, err := daemon.NewClient()
+			if err != nil {
+				return err
+			}
+			defer client.Close()
+			result, err := client.LocalStorageDelete(cmd.GetSessionName(), args[0])
+			if err != nil {
+				return err
+			}
+			if !result.Success {
+				return fmt.Errorf("daemon localstorage-delete failed: %s", result.Message)
+			}
+			fmt.Println(result.Message)
+			return nil
+		}
+
 		sess, err := cmd.GetSession()
 		if err != nil {
 			return err
@@ -433,6 +638,23 @@ var localstorageClearCmd = &cobra.Command{
 	Use:   "localstorage-clear",
 	Short: "Clear localStorage",
 	RunE: func(c *cobra.Command, args []string) error {
+		if daemonMode() {
+			client, err := daemon.NewClient()
+			if err != nil {
+				return err
+			}
+			defer client.Close()
+			result, err := client.LocalStorageClear(cmd.GetSessionName())
+			if err != nil {
+				return err
+			}
+			if !result.Success {
+				return fmt.Errorf("daemon localstorage-clear failed: %s", result.Message)
+			}
+			fmt.Println(result.Message)
+			return nil
+		}
+
 		sess, err := cmd.GetSession()
 		if err != nil {
 			return err
@@ -458,6 +680,24 @@ var sessionstorageListCmd = &cobra.Command{
 	Use:   "sessionstorage-list",
 	Short: "List sessionStorage",
 	RunE: func(c *cobra.Command, args []string) error {
+		if daemonMode() {
+			client, err := daemon.NewClient()
+			if err == nil {
+				defer client.Close()
+				result, err := client.SessionStorageList(cmd.GetSessionName())
+				if err == nil && result.Success {
+					if result.Storage == nil || len(result.Storage.Items) == 0 {
+						fmt.Println("No sessionStorage items")
+						return nil
+					}
+					for _, item := range result.Storage.Items {
+						fmt.Printf("%s: %s\n", item.Key, item.Value)
+					}
+					return nil
+				}
+			}
+		}
+
 		sess, err := cmd.GetSession()
 		if err != nil {
 			return err
@@ -497,6 +737,18 @@ var sessionstorageGetCmd = &cobra.Command{
 	Short: "Get sessionStorage item",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(c *cobra.Command, args []string) error {
+		if daemonMode() {
+			client, err := daemon.NewClient()
+			if err == nil {
+				defer client.Close()
+				result, err := client.SessionStorageGet(cmd.GetSessionName(), args[0])
+				if err == nil && result.Success {
+					fmt.Println(result.Message)
+					return nil
+				}
+			}
+		}
+
 		sess, err := cmd.GetSession()
 		if err != nil {
 			return err
@@ -529,6 +781,18 @@ var sessionstorageSetCmd = &cobra.Command{
 	Short: "Set sessionStorage item",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(c *cobra.Command, args []string) error {
+		if daemonMode() {
+			client, err := daemon.NewClient()
+			if err == nil {
+				defer client.Close()
+				result, err := client.SessionStorageSet(cmd.GetSessionName(), args[0], args[1])
+				if err == nil && result.Success {
+					fmt.Println(result.Message)
+					return nil
+				}
+			}
+		}
+
 		sess, err := cmd.GetSession()
 		if err != nil {
 			return err
@@ -558,6 +822,18 @@ var sessionstorageDeleteCmd = &cobra.Command{
 	Short: "Delete sessionStorage item",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(c *cobra.Command, args []string) error {
+		if daemonMode() {
+			client, err := daemon.NewClient()
+			if err == nil {
+				defer client.Close()
+				result, err := client.SessionStorageDelete(cmd.GetSessionName(), args[0])
+				if err == nil && result.Success {
+					fmt.Println(result.Message)
+					return nil
+				}
+			}
+		}
+
 		sess, err := cmd.GetSession()
 		if err != nil {
 			return err
@@ -585,6 +861,18 @@ var sessionstorageClearCmd = &cobra.Command{
 	Use:   "sessionstorage-clear",
 	Short: "Clear sessionStorage",
 	RunE: func(c *cobra.Command, args []string) error {
+		if daemonMode() {
+			client, err := daemon.NewClient()
+			if err == nil {
+				defer client.Close()
+				result, err := client.SessionStorageClear(cmd.GetSessionName())
+				if err == nil && result.Success {
+					fmt.Println(result.Message)
+					return nil
+				}
+			}
+		}
+
 		sess, err := cmd.GetSession()
 		if err != nil {
 			return err
@@ -610,6 +898,18 @@ var deleteDataCmd = &cobra.Command{
 	Use:   "delete-data",
 	Short: "Delete browser data",
 	RunE: func(c *cobra.Command, args []string) error {
+		if daemonMode() {
+			client, err := daemon.NewClient()
+			if err == nil {
+				defer client.Close()
+				result, err := client.CookieClear(cmd.GetSessionName())
+				if err == nil && result.Success {
+					fmt.Println("Browser data deleted (cookies cleared)")
+					return nil
+				}
+			}
+		}
+
 		sess, err := cmd.GetSession()
 		if err != nil {
 			return err

@@ -38,26 +38,47 @@ Error: session "default" not found
 | go-back | MethodGoBack | ✅ 支持 |
 | go-forward | MethodGoForward | ✅ 支持 |
 | reload | MethodReload | ✅ 支持 |
+| click | MethodClick | ✅ 支持 |
+| fill | MethodFill | ✅ 支持 |
+| hover | MethodHover | ✅ 支持 |
+| eval | MethodEval | ✅ 支持 |
+| type | MethodType | ✅ 支持 |
+| press | MethodPress | ✅ 支持 |
+| keydown | MethodKeyDown | ✅ 支持 |
+| keyup | MethodKeyUp | ✅ 支持 |
+| mousemove | MethodMouseMove | ✅ 支持 |
+| mousedown | MethodMouseDown | ✅ 支持 |
+| mouseup | MethodMouseUp | ✅ 支持 |
+| mousewheel | MethodMouseWheel | ✅ 支持 |
+| tab-new | MethodTabNew | ✅ 支持 |
+| tab-close | MethodTabClose | ✅ 支持 |
+| tab-list | MethodTabList | ✅ 支持 |
+| tab-select | MethodTabSelect | ✅ 支持 |
+| screenshot | MethodScreenshot | ✅ 支持 |
+| pdf | MethodPdf | ✅ 支持 |
+| dblclick | MethodDblClick | ✅ 支持 |
+| check | MethodCheck | ✅ 支持 |
+| uncheck | MethodUncheck | ✅ 支持 |
+| select | MethodSelect | ✅ 支持 |
+| drag | MethodDrag | ✅ 支持 |
+| upload | MethodUpload | ✅ 支持 |
+| dialog-accept | MethodDialogAccept | ✅ 支持 |
+| dialog-dismiss | MethodDialogDismiss | ✅ 支持 |
+| state-save | MethodStateSave | ✅ 支持 |
+| state-load | MethodStateLoad | ✅ 支持 |
+| cookie-list | MethodCookieList | ✅ 支持 |
+| cookie-get | MethodCookieGet | ✅ 支持 |
+| cookie-set | MethodCookieSet | ✅ 支持 |
+| cookie-delete | MethodCookieDelete | ✅ 支持 |
+| cookie-clear | MethodCookieClear | ✅ 支持 |
+| localstorage-* | MethodLocalStorage | ✅ 支持 |
+| sessionstorage-* | MethodSessionStorage | ✅ 支持 |
 
 ### 尚未支持 daemon 的命令
 
 | 命令 | 方法名 | 优先级 |
 |------|--------|--------|
-| click | MethodClick | 高 |
-| fill | MethodFill | 高 |
-| hover | MethodHover | 高 |
-| eval | MethodEval | 中 |
-| check/uncheck | MethodCheck | 低 |
-| drag | MethodDrag | 低 |
-| upload | MethodUpload | 低 |
-| tab-new | MethodTabNew | 高 |
-| tab-close | MethodTabClose | 高 |
-| tab-list | MethodTabList | 高 |
-| tab-select | MethodTabSelect | 高 |
-| screenshot | MethodScreenshot | 高 |
-| pdf | MethodPdf | 高 |
-| type | MethodType | 中 |
-| press | MethodPress | 中 |
+| run-code | - | 低 |
 
 ## 修复方案
 
